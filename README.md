@@ -194,11 +194,3 @@ I implemented this step in `lane_detector.py` file in the function `draw_lanes_o
 Result of a video pipeline is saved in ./project_video_output.mp4 file.
 
 ![alt text][video1]
-
----
-
-The most challenging part of the project was finding working image masking techniques, so I could find the lines in different lighting conditions and road colors. I've been converting videos to different color spaces to check whether I could detect more image features so they can be used in binarization. I've tried hsv, hsl, and YCbCr combined with application of sobel operator.
-
-The pipeline I wrote is very likely to fail in different weather or lighting conditions. I also had problems with challenge videos. Mostly due to results of pavement repairs. If I were to create the real lane detector I'd probably try using an evolutionary algorithm in order to find the best set of parameters. It would require some data preparation but the results could be promising.
-
-Even though most of the code for the project was given, I had to understand every snippet so I could tweak parameters and make it work properly.
