@@ -1,0 +1,164 @@
+<p><strong>Advanced Lane Finding Project</strong></p>
+<p>The goals / steps of this project are the following:</p>
+<ul>
+  <li>Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.</li>
+  <li>Apply a distortion correction to raw images.</li>
+  <li>Use color transforms, gradients, etc., to create a thresholded binary image.</li>
+  <li>Apply a perspective transform to rectify binary image (&quot;birds-eye view&quot;).</li>
+  <li>Detect lane pixels and fit to find the lane boundary.</li>
+  <li>Determine the curvature of the lane and vehicle position with respect to center.</li>
+  <li>Warp the detected lane boundaries back onto the original image.</li>
+  <li>Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.</li>
+</ul>
+<p>###Camera Calibration</p>
+<p>####1. Briefly state how you computed the camera matrix and distortion coefficients. Provide an example of a distortion corrected calibration image.</p>
+<p>The code responsible for camera calibration is contained in static <code>calibrate</code> method of Camera class contained in src/camera.py file.</p>
+<p>I start by preparing an array of &quot;object points&quot;, which will be the (x, y, z) coordinates of the chessboard corners in the real world.
+Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.<br />
+Thus, <code>object_points</code> is just a replicated array of coordinates, and <code>real_object_points</code> will be appended with a copy of it every time I successfully detect all chessboard corners in a test image.  <code>image_points</code> will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection.</p>
+<p>I then used the output <code>real_object_points</code> and <code>image_points</code> to compute the camera calibration and distortion coefficients using the <code>cv2.calibrateCamera()</code> function.  I applied this distortion correction to the test image using the <code>cv2.undistort()</code> function and obtained this result:</p>
+<p><img src="./output_images/undistorted_chessboard.png" alt="alt text" title="Undistorted chessboard" /></p>
+<p>###Pipeline (single images)</p>
+<p>####1. Provide an example of a distortion-corrected image.
+Distortion correction is performed by previously calibrated camera object. To do that <code>correct_distortions(image)</code> method should be called. All it does is calling cv2.undistort(image, self._camera_matrix, self._dist_coefficients) function of opencv.</p>
+<p>Example undistorted image is presented below:</p>
+<p><img src="./output_images/undistorted_test_image.png" alt="alt text" title="Road Transformed" />
+####2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.</p>
+<p>I used a combination of color and gradient thresholds to generate a binary image. All the thresholding can be found in method called <code>threshold(image)</code> of a <code>LaneDetector</code> class. The methods I applied include:</p>
+<ul>
+  <li>thresholding saturation channel of hls image,</li>
+  <li>thresholding the result of applying sobel operator to l channel of hls image,</li>
+  <li>thresholding the result of applying sobel operator on s channel of hls image.</li>
+</ul>
+<p>The final result is a combination of three operations as shown below:</p>
+<pre><code>combined[((sobel_on_l_binary == 1) | ((sobel_on_s_binary == 1) &amp; (s_binary == 1)))] = 255
+</code></pre>
+<p>Example result is shown in an image below:</p>
+<p><img src="./output_images/thresholded_test_image.png" alt="alt text" title="Binary Example" /></p>
+<p>####3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.</p>
+<p>The code responsible for preparing transformation matrices can be found in an initializer of LaneDetector class. I decided to hardcode the values so they properly works with images sized 1280x720.</p>
+<p>Transformation matrices preparation code:</p>
+<pre><code>source_points = np.float32([[170, 720], [566, 450], [716, 450], [1120, 720]])
+dest_points = np.float32([[350, 720], [200, 0], [1080, 0], [930, 720]])
+
+self._transformation_matrix = cv2.getPerspectiveTransform(source_points, dest_points)
+self._inverse_transformation_matrix = cv2.getPerspectiveTransform(dest_points, source_points)
+
+</code></pre>
+<p>This resulted in the following source and destination points:</p>
+<table>
+  <thead>
+    <tr><th align="center"> Source        </th><th align="center"> Destination   </th></tr>
+  </thead>
+  <tbody>
+    <tr><td align="center"> 170, 720      </td><td align="center"> 350, 720      </td></tr>
+    <tr><td align="center"> 566, 450      </td><td align="center"> 200, 0        </td></tr>
+    <tr><td align="center"> 716, 450      </td><td align="center"> 1080, 0       </td></tr>
+    <tr><td align="center"> 1120, 720     </td><td align="center"> 930, 720      </td></tr>
+  </tbody>
+</table>
+<p>I verified that my perspective transform was working as expected by manually checking the results and verifying that the lane lines are parallel.</p>
+<p>Example result of transformation:</p>
+<p><img src="./output_images/transformed_test_image.png" alt="alt text" title="Transformed Image Example" /></p>
+<p>####4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?</p>
+<p>Lane detection is performed in the <code>update_lane_lines_positions</code> method of <code>LaneLine</code> class. It comprises of the following steps:</p>
+<ul>
+  <li>histogram generation and detecting base positions of left and right lanes,</li>
+  <li>sliding window search for lane lines in an image,</li>
+  <li>if lane was previously found quick search for a lane is conducted instead of sliding window search,</li>
+  <li>a sanity check is performed on a found lines, latest found coefficients are discarded if the test fails.</li>
+</ul>
+<p>In the first step I generated a histogram basing on the bottom half of an image in order to find base lane positions. It is assumed that a left lane can be found in a left half of an image, similarly, right lane can be found in the right half of an image. Base positions were determined by searching for the maximum values in a histogram's left and right parts.</p>
+<p>It's shown in the following snippet:</p>
+<pre><code>histogram = np.sum(binary_warped_image[binary_warped_image.shape[0] / 2:, :], axis=0)
+midpoint = np.int(histogram.shape[0] / 2)
+left_lane_base_x_position = np.argmax(histogram[:midpoint])
+right_lane_base_x_position = np.argmax(histogram[midpoint:]) + midpoint
+</code></pre>
+<p>Sliding window search is implemented in <code>find_in(self, binary_warped_image, lane_current_x_position)</code> method of <code>LaneLine</code> class. For each step all the pixels within window are detected. Window is re-centered if at least 50 pixels are found.</p>
+<pre><code>window_height = np.int(binary_warped_image.shape[0] / self._sliding_windows_nr)
+for window in range(self._sliding_windows_nr):
+    lower_bound = binary_warped_image.shape[0] - (window + 1) * window_height
+    upper_bound = binary_warped_image.shape[0] - window * window_height
+    left_bound = lane_current_x_position - self._margin
+    right_bound = lane_current_x_position + self._margin
+
+    indices = (
+        (nonzeroy &gt;= lower_bound) &amp; (nonzeroy &lt; upper_bound) &amp;
+        (nonzerox &gt;= left_bound) &amp; (nonzerox &lt; right_bound)
+    ).nonzero()[0]
+
+    lane_indices.append(indices)
+    if len(indices) &gt; self._recenter_threshold:
+        lane_current_x_position = np.int(np.mean(nonzerox[indices]))
+</code></pre>
+<p>Having all the pixels of a line found. A method <code>fit_poynomial(x_points, y_points)</code> is called. It uses numpy function fit_poly to find second order polynomial that fits given points best. I keep track of polynomial coefficients history in order to smooth the values, so the lines in a video appear more stable.</p>
+<pre><code>def fit_polynomial(self, x_points, y_points):
+    &quot;&quot;&quot;
+    Finds a polynomial that fits given points the best.
+
+    :param np.ndarray x_points: List of x points,
+    :param np.ndarray y_points: List of y points.
+    &quot;&quot;&quot;
+    if x_points.size == 0 or y_points.size == 0:
+        return
+    self._polynomial_coefficients_history.append(np.polyfit(y_points, x_points, 2))
+    if len(self._polynomial_coefficients_history) &gt; self._smooth_iterations_nb:
+        self._polynomial_coefficients_history.pop(0)
+</code></pre>
+<p>If the method above successfully detected lane line, next iteration will use a quick search method based on using previously matched coefficients. The method is called <code>quick_detect</code> and looks for lane lines within a margin of 100 pixels from a line generated using currently fit polynomial.</p>
+<pre><code>def _quick_detect(self, binary_warped_image):
+    &quot;&quot;&quot;
+    Does a quicker search of lane lines basing on previously found fit.
+
+    :param np.ndarray binary_warped_image: Warped binarized image.
+    &quot;&quot;&quot;
+    nonzero = binary_warped_image.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    margin = 100
+    lane_indices = (
+        (nonzerox &gt; (self.generate_x_points(nonzeroy) - margin)) &amp;
+        (nonzerox &lt; (self.generate_x_points(nonzeroy) + margin))
+    )
+
+    x_points = nonzerox[lane_indices]
+    y_points = nonzeroy[lane_indices]
+    self.fit_polynomial(x_points, y_points)
+</code></pre>
+<p>Sanity check is based on a differences between polynomial coefficients. The values used in a check were found in a following way:</p>
+<ul>
+  <li>all the coefficients history from an entire video were stored,</li>
+  <li>differences between all the measurements were calculated,</li>
+  <li>histograms of differences were created,</li>
+  <li>values that fell out of the highest cardinality buckets were considered outliers,</li>
+  <li>highest cardinality buckets' limits are used in a sanity check.</li>
+</ul>
+<p>Example image with polynomial overplotted is shown below.</p>
+<p><img src="./output_images/fit_overplotted.png" alt="alt text" title="Fit Visual" /></p>
+<p>####5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.</p>
+<p>Radius of curvature and distance from the center can be found in <code>calculate_line_curvature</code> and <code>calculate_distance_from_center</code> methods of <code>LaneLine</code> class. They both calculate values in meters.</p>
+<p>Distance from center is calculated in a following way:</p>
+<ul>
+  <li>x positions of the lane lines are calculated for last row of an image,</li>
+  <li>position of the lane center is calculated as a difference of those positions, divided by 2 and position of the left line added: (first_x_position + ((second_x_position - first_x_position) / 2)),</li>
+  <li>distance from that center, assuming that camera is mounted in the center, is distance from center of the lane found in previous step and the center of an image (hardcoded value of 640 was used as an image center),</li>
+  <li>the result is then converted to distance meters.</li>
+</ul>
+<p>Radius of curvature is calculated using an equation given in a lesson. Before applying the equation new polynomial- the one in metrics needed to be found.</p>
+<p>####6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.</p>
+<p>I implemented this step in <code>lane_detector.py</code> file in the function <code>draw_lanes_on_image()</code>.  Here is an example of my result on a test image:</p>
+<p><img src="./output_images/detected_lane_lines.png" alt="alt text" title="Final Result" /></p>
+<hr />
+<p>###Pipeline (video)</p>
+<p>####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).</p>
+<p>Result of a video pipeline is saved in ./project_video_output.mp4 file.</p>
+<p><img src="./project_video.mp4" alt="alt text" title="Video" /></p>
+<hr />
+<p>###Discussion</p>
+<p>####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?</p>
+<p>The most challenging part of the project was finding working image masking techniques, so I could find the lines in different lighting conditions and road colors. I've been converting videos to different color spaces to check whether I could detect more image features so they can be used in binarization. I've tried hsv, hsl, and YCbCr combined with application of sobel operator.</p>
+<p>The pipeline I wrote is very likely to fail in different weather or lighting conditions. I also had problems with challenge videos. Mostly due to results of pavement repairs. If I were to create the real lane detector I'd probably try using an evolutionary algorithm in order to find the best set of parameters. It would require some data preparation but the results could be promising.</p>
+<p>Even though most of the code for the project was given, I had to understand every snippet so I could tweak parameters and make it work properly.</p>
+
+
