@@ -24,8 +24,6 @@ The goals / steps of this project are the following:
 
 ###Camera Calibration
 
-####1. Briefly state how you computed the camera matrix and distortion coefficients. Provide an example of a distortion corrected calibration image.
-
 The code responsible for camera calibration is contained in static `calibrate` method of Camera class contained in src/camera.py file.
 
 I start by preparing an array of "object points", which will be the (x, y, z) coordinates of the chessboard corners in the real world.
@@ -38,13 +36,11 @@ I then used the output `real_object_points` and `image_points` to compute the ca
 
 ###Pipeline (single images)
 
-####1. Provide an example of a distortion-corrected image.
 Distortion correction is performed by previously calibrated camera object. To do that `correct_distortions(image)` method should be called. All it does is calling cv2.undistort(image, self._camera_matrix, self._dist_coefficients) function of opencv.
 
 Example undistorted image is presented below:
 
 ![alt text][image2]
-####2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
 
 I used a combination of color and gradient thresholds to generate a binary image. All the thresholding can be found in method called `threshold(image)` of a `LaneDetector` class. The methods I applied include:
 
@@ -60,8 +56,6 @@ combined[((sobel_on_l_binary == 1) | ((sobel_on_s_binary == 1) & (s_binary == 1)
 Example result is shown in an image below:
 
 ![alt text][image3]
-
-####3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
 The code responsible for preparing transformation matrices can be found in an initializer of LaneDetector class. I decided to hardcode the values so they properly works with images sized 1280x720.
 
@@ -89,8 +83,6 @@ I verified that my perspective transform was working as expected by manually che
 Example result of transformation:
 
 ![alt text][image4]
-
-####4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
 
 Lane detection is performed in the `update_lane_lines_positions` method of `LaneLine` class. It comprises of the following steps:
 * histogram generation and detecting base positions of left and right lanes,
@@ -179,8 +171,6 @@ Example image with polynomial overplotted is shown below.
 
 ![alt text][image5]
 
-####5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
-
 Radius of curvature and distance from the center can be found in `calculate_line_curvature` and `calculate_distance_from_center` methods of `LaneLine` class. They both calculate values in meters.
 
 Distance from center is calculated in a following way:
@@ -201,17 +191,11 @@ I implemented this step in `lane_detector.py` file in the function `draw_lanes_o
 
 ###Pipeline (video)
 
-####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).
-
 Result of a video pipeline is saved in ./project_video_output.mp4 file.
 
 ![alt text][video1]
 
 ---
-
-###Discussion
-
-####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
 The most challenging part of the project was finding working image masking techniques, so I could find the lines in different lighting conditions and road colors. I've been converting videos to different color spaces to check whether I could detect more image features so they can be used in binarization. I've tried hsv, hsl, and YCbCr combined with application of sobel operator.
 
